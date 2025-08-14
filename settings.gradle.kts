@@ -1,6 +1,7 @@
-rootProject.name = "YuiPlugin"
+rootProject.name = "YuiSynapse"
 
-include(":yuiplugin-adapter-config")
-include(":yuiplugin-common-api")
-include(":yuiplugin-bootstrap")
-include(":yuiplugin-common")
+include(":yuisynapse-providers:provider-openrouter")
+include(":yuisynapse-adapter-config")
+include(":yuisynapse-common-api")
+include(":yuisynapse-bootstrap")
+include(":yuisynapse-common")

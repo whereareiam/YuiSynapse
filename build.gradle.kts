@@ -17,9 +17,9 @@ subprojects {
         mavenLocal()
     }
 
-    if (project.name != "yuiplugin-common-api") {
+    if (project.name != "yuisynapse-common-api") {
         dependencies {
-            "compileOnly"(project(":yuiplugin-common-api"))
+            "compileOnly"(project(":yuisynapse-common-api"))
         }
     }
 
