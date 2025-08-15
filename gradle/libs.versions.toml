@@ -3,8 +3,8 @@
 # general
 yui = "dev"
 lombok = "1.18.38"
-spring = "3.4.4"
-jda = "5.3.2"
+spring = "3.5.4"
+jda = "5.3.6"
 
 # plugins
 shadow = "8.3.6"
@@ -23,3 +23,8 @@ jda = { group = "net.dv8tion", name = "JDA", version.ref = "jda" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 
 [bundles]
+
+spring = [
+    "spring-boot",
+    "spring-webflux"
+]

@@ -24,8 +24,8 @@ subprojects {
     }
 
     dependencies {
+        "compileOnly"(rootProject.libs.bundles.spring)
         "compileOnly"(rootProject.libs.yui)
-        "compileOnly"(rootProject.libs.spring.boot)
         "compileOnly"(rootProject.libs.jda)
 
         "compileOnly"(rootProject.libs.lombok)
