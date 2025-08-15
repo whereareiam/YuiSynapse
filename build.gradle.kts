@@ -26,7 +26,6 @@ subprojects {
     dependencies {
         "compileOnly"(rootProject.libs.bundles.spring)
         "compileOnly"(rootProject.libs.yui)
-        "compileOnly"(rootProject.libs.jda)
 
         "compileOnly"(rootProject.libs.lombok)
         "annotationProcessor"(rootProject.libs.lombok)
