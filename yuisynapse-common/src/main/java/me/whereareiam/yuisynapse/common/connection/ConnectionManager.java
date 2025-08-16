@@ -1,12 +1,14 @@
 package me.whereareiam.yuisynapse.common.connection;
 
 import me.whereareiam.yuisynapse.api.model.Connection;
+import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Service
 public class ConnectionManager {
 	private final Map<String, Connection> connections = new ConcurrentHashMap<>();
 

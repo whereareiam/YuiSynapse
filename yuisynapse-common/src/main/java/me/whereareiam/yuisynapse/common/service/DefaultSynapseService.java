@@ -28,8 +28,7 @@ import java.util.concurrent.CompletionStage;
 @RequiredArgsConstructor
 public class DefaultSynapseService implements SynapseService {
 	private final ProviderRegistry providerRegistry;
-
-	private final ConnectionManager connectionManager = new ConnectionManager();
+	private final ConnectionManager connectionManager;
 
 	@Override
 	public CompletionStage<Connection> create(Connection connection) {
