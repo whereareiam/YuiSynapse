@@ -16,7 +16,6 @@ public class OpenRouterConfiguration {
         log.info("Configuring OpenRouter WebClient: baseUrl={}", provider.getUrl());
         return WebClient.builder()
                 .baseUrl(provider.getUrl())
-                .defaultHeader("Authorization", "Bearer " + provider.getKey())
                 .defaultHeader("Content-Type", "application/json")
                 .build();
     }

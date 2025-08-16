@@ -9,6 +9,7 @@ import me.whereareiam.yuisynapse.api.model.Connection;
 import me.whereareiam.yuisynapse.api.model.Message;
 import me.whereareiam.yuisynapse.api.model.Options;
 import me.whereareiam.yuisynapse.api.output.ProviderClient;
+import me.whereareiam.yuisynapse.api.output.KeyProvider;
 import me.whereareiam.yuisynapse.api.type.ProviderType;
 import me.whereareiam.yuisynapse.provider.openrouter.model.OpenRouterChatRequest;
 import me.whereareiam.yuisynapse.provider.openrouter.model.OpenRouterChatResponse;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OpenRouterClient implements ProviderClient {
 	private final WebClient openRouterWebClient;
+	private final KeyProvider keyProvider;
 
 	private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -60,31 +62,40 @@ public class OpenRouterClient implements ProviderClient {
 				.build();
 
 		if (options != null && options.isStream())
-			return openRouterWebClient.post()
+			return withKeyRetry(apiKey -> openRouterWebClient.post()
 					.uri("/chat/completions")
 					.body(BodyInserters.fromValue(request))
 					.accept(MediaType.TEXT_EVENT_STREAM)
+					.headers(h -> h.setBearerAuth(apiKey))
 					.retrieve()
 					.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
 					})
 					.onErrorResume(WebClientResponseException.class, e -> {
 						String body = e.getResponseBodyAsString();
 						log.warn("OpenRouter error: {} - {}", e.getStatusCode(), body);
+						if (e.getStatusCode().value() == 429 || e.getStatusCode().is5xxServerError()) {
+							return Flux.error(e);
+						}
 						return Flux.error(new ProviderRequestException("OpenRouter request failed: " + e.getStatusCode() + " - " + body, e));
 					})
 					.mapNotNull(ServerSentEvent::data)
 					.filter(data -> data != null && !data.isBlank())
 					.flatMapIterable(this::parseSseData)
-					.takeUntil(msg -> msg.getMetadata() != null && Boolean.TRUE.equals(msg.getMetadata().getOrDefault("done", false)));
+					.takeUntil(msg -> msg.getMetadata() != null && Boolean.TRUE.equals(msg.getMetadata().getOrDefault("done", false))),
+					keyProvider.keyCapacity(type()));
 
-		return openRouterWebClient.post()
+		return withKeyRetry(apiKey -> openRouterWebClient.post()
 				.uri("/chat/completions")
 				.body(BodyInserters.fromValue(request))
+				.headers(h -> h.setBearerAuth(apiKey))
 				.retrieve()
 				.bodyToMono(OpenRouterChatResponse.class)
 				.onErrorResume(WebClientResponseException.class, e -> {
 					String body = e.getResponseBodyAsString();
 					log.warn("OpenRouter error: {} - {}", e.getStatusCode(), body);
+					if (e.getStatusCode().value() == 429 || e.getStatusCode().is5xxServerError()) {
+						return Mono.error(e);
+					}
 					return Mono.error(new ProviderRequestException("OpenRouter request failed: " + e.getStatusCode() + " - " + body, e));
 				})
 				.flatMapMany(resp -> {
@@ -97,6 +108,29 @@ public class OpenRouterClient implements ProviderClient {
 							.role(Message.Role.ASSISTANT)
 							.content(content)
 							.build());
+				}),
+				keyProvider.keyCapacity(type()));
+	}
+
+	private Flux<Message> withKeyRetry(java.util.function.Function<String, Flux<Message>> attempt, int remaining) {
+		if (remaining <= 0) {
+			return Flux.error(new ProviderRequestException("No available API keys for provider: " + type()));
+		}
+		String key = keyProvider.acquire(type());
+		if (key == null) {
+			return Flux.error(new ProviderRequestException("No available API keys for provider: " + type()));
+		}
+		return attempt.apply(key)
+				.onErrorResume(WebClientResponseException.class, e -> {
+					if (e.getStatusCode().value() == 429) {
+						keyProvider.onRateLimited(type(), key);
+						return withKeyRetry(attempt, remaining - 1);
+					}
+					if (e.getStatusCode().is5xxServerError()) {
+						keyProvider.onFailure(type(), key);
+						return withKeyRetry(attempt, remaining - 1);
+					}
+					return Flux.error(e);
 				});
 	}
 
