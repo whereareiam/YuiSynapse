@@ -25,7 +25,14 @@ public class InterestToolConfig extends ToolConfig {
 
 	private List<String> mentions;
 	private List<String> prefixes;
-	private Map<String, List<String>> keywords;
+	/**
+	 * Positive keywords raise interest. Keys are locales (e.g., "*", "en", "en-US").
+	 */
+	private Map<String, List<String>> positiveKeywords;
+	/**
+	 * Negative keywords decrease interest. Keys are locales (e.g., "*", "en", "en-US").
+	 */
+	private Map<String, List<String>> negativeKeywords;
 }
 
 

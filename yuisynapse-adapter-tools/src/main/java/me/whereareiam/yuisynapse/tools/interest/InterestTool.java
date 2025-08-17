@@ -77,17 +77,17 @@ public class InterestTool implements Tool {
 		double continuation = computeContinuationBoost(user);
 		double rawScore =
 				toolConfig.getMentionWeight() * ((mentioned || prefixed) ? 1.0 : 0.0) +
-						toolConfig.getKeywordWeight() * kw.getScore() +
-						toolConfig.getContinuationWeight() * continuation;
+					toolConfig.getKeywordWeight() * kw.getSignedScore() +
+					toolConfig.getContinuationWeight() * continuation;
 		double score = clamp01(rawScore);
 
 		runContext.put(ToolMetadataKeys.INTEREST_PROBABILITY, score);
 
 		boolean allow =
 				(toolConfig.isPassIfMentioned() && (mentioned || prefixed)) ||
-						(toolConfig.isPassIfKeyword() && kw.isAnyMatched()) ||
-						(toolConfig.isPassIfContinuation() && continuation >= toolConfig.getContinuationAllowMin()) ||
-						score >= toolConfig.getThreshold();
+					(toolConfig.isPassIfKeyword() && kw.isAnyPositiveMatched()) ||
+					(toolConfig.isPassIfContinuation() && continuation >= toolConfig.getContinuationAllowMin()) ||
+					score >= toolConfig.getThreshold();
 
 		Map<String, Object> metadata = new HashMap<>();
 		metadata.put(ToolMetadataKeys.INTEREST_PROBABILITY, score);
@@ -154,47 +154,51 @@ public class InterestTool implements Tool {
 
 		if (contentLower == null || contentLower.isBlank()) return eval;
 
-		Map<String, List<KeywordMatcher>> keywordMatchersByLocale = buildKeywordMatchersByLocale();
+		Map<String, List<KeywordMatcher>> positiveByLocale = buildMatchersByLocale(toolConfig != null ? toolConfig.getPositiveKeywords() : null);
+		Map<String, List<KeywordMatcher>> negativeByLocale = buildMatchersByLocale(toolConfig != null ? toolConfig.getNegativeKeywords() : null);
 
 		String locale = detectLocale(msg);
 
-		// Merge matchers in priority: "*", full tag (e.g., "en-US"), base tag ("en"), else fallback to all locales
-		List<KeywordMatcher> matchers = new ArrayList<>();
-		addAll(matchers, keywordMatchersByLocale.get("*"));
-		if (locale != null) {
-			addAll(matchers, keywordMatchersByLocale.get(locale));
-			int dash = locale.indexOf('-');
-			if (dash > 0)
-				addAll(matchers, keywordMatchersByLocale.get(locale.substring(0, dash)));
-		}
+		List<KeywordMatcher> positive = mergeForLocale(positiveByLocale, locale);
+		List<KeywordMatcher> negative = mergeForLocale(negativeByLocale, locale);
 
-		if (matchers.isEmpty())
-			keywordMatchersByLocale.values().forEach(list -> addAll(matchers, list));
+		int posTotal = positive.size();
+		int negTotal = negative.size();
 
-		if (matchers.isEmpty())
-			return eval;
-
-		int total = matchers.size();
-		int matches = 0;
-		for (KeywordMatcher km : matchers) {
+		int posMatches = 0;
+		for (KeywordMatcher km : positive) {
 			if (km.matches(contentLower)) {
-				matches++;
-				eval.setAnyMatched(true);
+				posMatches++;
+				eval.setAnyPositiveMatched(true);
 			}
 		}
 
-		eval.setTotal(total);
-		eval.setScore((double) matches / (double) total);
+		int negMatches = 0;
+		for (KeywordMatcher km : negative) {
+			if (km.matches(contentLower)) {
+				negMatches++;
+				eval.setAnyNegativeMatched(true);
+			}
+		}
+
+		double posScore = posTotal > 0 ? (double) posMatches / (double) posTotal : 0.0;
+		double negScore = negTotal > 0 ? (double) negMatches / (double) negTotal : 0.0;
+		double signed = posScore - negScore;
+
+		eval.setPositiveTotal(posTotal);
+		eval.setNegativeTotal(negTotal);
+		eval.setPositiveScore(posScore);
+		eval.setNegativeScore(negScore);
+		eval.setSignedScore(signed);
 
 		return eval;
 	}
 
-	private Map<String, List<KeywordMatcher>> buildKeywordMatchersByLocale() {
+	private Map<String, List<KeywordMatcher>> buildMatchersByLocale(Map<String, List<String>> rawSpec) {
 		Map<String, List<KeywordMatcher>> result = new HashMap<>();
-		if (toolConfig == null || toolConfig.getKeywords() == null || toolConfig.getKeywords().isEmpty())
-			return result;
+		if (rawSpec == null || rawSpec.isEmpty()) return result;
 
-		for (Map.Entry<String, List<String>> entry : toolConfig.getKeywords().entrySet()) {
+		for (Map.Entry<String, List<String>> entry : rawSpec.entrySet()) {
 			String locale = entry.getKey();
 			List<KeywordMatcher> keywordMatchers = new ArrayList<>();
 			if (entry.getValue() != null) {
@@ -204,13 +208,11 @@ public class InterestTool implements Tool {
 					String keyword = raw.trim();
 					if (keyword.isEmpty()) continue;
 
-					// Support regex by prefix "re:" else treat as literal (case-insensitive via lower-casing)
 					if (keyword.startsWith("re:") && keyword.length() > 3) {
 						String patternBody = keyword.substring(3);
 						try {
 							keywordMatchers.add(new KeywordMatcher(Pattern.compile(patternBody, Pattern.CASE_INSENSITIVE), null));
 						} catch (Exception ignored) {
-							// fallback to literal if regex invalid
 							keywordMatchers.add(new KeywordMatcher(null, keyword.toLowerCase()));
 						}
 						continue;
@@ -226,6 +228,20 @@ public class InterestTool implements Tool {
 		return result;
 	}
 
+	private List<KeywordMatcher> mergeForLocale(Map<String, List<KeywordMatcher>> byLocale, String locale) {
+		List<KeywordMatcher> merged = new ArrayList<>();
+		if (byLocale == null || byLocale.isEmpty()) return merged;
+
+		addAll(merged, byLocale.get("*"));
+		if (locale != null) {
+			addAll(merged, byLocale.get(locale));
+			int dash = locale.indexOf('-');
+			if (dash > 0) addAll(merged, byLocale.get(locale.substring(0, dash)));
+		}
+		if (merged.isEmpty()) byLocale.values().forEach(list -> addAll(merged, list));
+		return merged;
+	}
+
 	private double computeContinuationBoost(Message user) {
 		if (historyStore == null || toolConfig == null || toolConfig.getContinuationHalfLifeSeconds() <= 0)
 			return 0.0;
@@ -238,7 +254,6 @@ public class InterestTool implements Tool {
 		long sec = Duration.between(last, Instant.now()).getSeconds();
 		if (sec < 0) sec = 0;
 
-		// exponential decay: 1.0 at t=0, halves every half-life
 		double halfLives = (double) sec / (double) toolConfig.getContinuationHalfLifeSeconds();
 		double value = Math.pow(0.5, halfLives);
 
