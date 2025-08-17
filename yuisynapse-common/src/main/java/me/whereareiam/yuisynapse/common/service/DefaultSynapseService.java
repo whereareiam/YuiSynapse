@@ -2,12 +2,16 @@ package me.whereareiam.yuisynapse.common.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import me.whereareiam.yuisynapse.api.MetaKeys;
 import me.whereareiam.yuisynapse.api.exception.ConnectionNotFoundException;
+import me.whereareiam.yuisynapse.api.input.HistoryStore;
 import me.whereareiam.yuisynapse.api.input.SynapseService;
 import me.whereareiam.yuisynapse.api.model.Connection;
 import me.whereareiam.yuisynapse.api.model.Message;
 import me.whereareiam.yuisynapse.api.model.Options;
 import me.whereareiam.yuisynapse.api.output.ProviderClient;
+import me.whereareiam.yuisynapse.api.tool.pipeline.ToolPipeline;
+import me.whereareiam.yuisynapse.api.tool.pipeline.ToolPipelineResult;
 import me.whereareiam.yuisynapse.common.connection.ConnectionManager;
 import me.whereareiam.yuisynapse.common.provider.ProviderRegistry;
 import me.whereareiam.yuisynapse.common.util.PersonaBuilder;
@@ -29,6 +33,8 @@ import java.util.concurrent.CompletionStage;
 public class DefaultSynapseService implements SynapseService {
 	private final ProviderRegistry providerRegistry;
 	private final ConnectionManager connectionManager;
+	private final ToolPipeline toolPipeline;
+	private final HistoryStore historyStore;
 
 	@Override
 	public CompletionStage<Connection> create(Connection connection) {
@@ -56,14 +62,35 @@ public class DefaultSynapseService implements SynapseService {
 
 	@Override
 	public Publisher<Message> send(Connection connection, List<Message> messages, Options options) {
-		Connection persisted = connectionManager.get(connection.getId()).orElseThrow(() -> new ConnectionNotFoundException(connection.getId()));
-		log.debug("Sending messages: connectionId={}, count={}", persisted.getId(), messages != null ? messages.size() : 0);
+		if (messages.isEmpty())
+			return Flux.empty();
 
-		List<Message> pipelineInput = prependSystemPersonaIfPresent(persisted, messages);
+		Connection persisted = connectionManager.get(connection.getId()).orElseThrow(() -> new ConnectionNotFoundException(connection.getId()));
+		log.debug("Sending messages: connectionId={}, count={}", persisted.getId(), messages.size());
+
+		List<Message> initial = prependSystemPersonaIfPresent(persisted, messages);
+
+		ToolPipelineResult pipelineResult = toolPipeline.run(persisted, initial);
+		if (!pipelineResult.isShouldForward()) {
+			log.debug("Interest gate blocked forwarding: connectionId={}", persisted.getId());
+			return Flux.empty();
+		}
 
 		ProviderClient client = providerRegistry.get(persisted.getConfiguration().getProvider());
-		return Flux.from(client.send(persisted, pipelineInput, options))
+		return Flux.from(client.send(persisted, pipelineResult.getMessages(), options))
 				.doOnNext(this::timestampIfMissing)
+				.doOnNext(m -> {
+					if (m.getRole() == Message.Role.ASSISTANT) {
+						try {
+							String userKey = messages.stream().filter(x -> x.getRole() == Message.Role.USER && x.getAuthor() != null && x.getAuthor().getId() != null)
+									.map(x -> x.getAuthor().getId()).findFirst().orElse(null);
+							String channelKey = messages.stream().filter(x -> x.getMetadata() != null && x.getMetadata().get(MetaKeys.CHANNEL_ID) != null)
+									.map(x -> String.valueOf(x.getMetadata().get(MetaKeys.CHANNEL_ID))).findFirst().orElse(null);
+							historyStore.append(userKey, channelKey, List.of(m));
+						} catch (Exception ignored) {
+						}
+					}
+				})
 				.doOnError(err -> log.error("Provider send failed: connectionId={}, err={}", persisted.getId(), err.toString()));
 	}
 

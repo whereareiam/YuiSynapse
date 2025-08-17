@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import me.whereareiam.yuisynapse.api.model.config.tool.base.ToolDefinition;
 import me.whereareiam.yuisynapse.api.type.ProviderType;
 
 import java.util.List;
@@ -27,6 +28,8 @@ public class Connection {
 	public static class Configuration {
 		private ProviderType provider;
 		private String model;
+
+		private List<ToolDefinition> toolchain;
 	}
 
 	@Getter

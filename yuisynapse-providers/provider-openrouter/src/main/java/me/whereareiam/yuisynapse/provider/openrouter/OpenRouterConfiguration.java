@@ -10,15 +10,15 @@ import org.springframework.web.reactive.function.client.WebClient;
 @Slf4j
 @Configuration
 public class OpenRouterConfiguration {
-    @Bean
-    public WebClient openRouterWebClient(SynapseSettings settings) {
-        var provider = settings.getProviders().get(ProviderType.OPENROUTER);
-        log.info("Configuring OpenRouter WebClient: baseUrl={}", provider.getUrl());
-        return WebClient.builder()
-                .baseUrl(provider.getUrl())
-                .defaultHeader("Content-Type", "application/json")
-                .build();
-    }
+	@Bean
+	public WebClient openRouterWebClient(SynapseSettings settings) {
+		var provider = settings.getProviders().get(ProviderType.OPENROUTER);
+		log.debug("Configuring OpenRouter WebClient: baseUrl={}", provider.getUrl());
+		return WebClient.builder()
+				.baseUrl(provider.getUrl())
+				.defaultHeader("Content-Type", "application/json")
+				.build();
+	}
 }
 
 

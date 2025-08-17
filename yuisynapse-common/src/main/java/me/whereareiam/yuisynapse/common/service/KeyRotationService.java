@@ -37,7 +37,7 @@ public class KeyRotationService implements KeyProvider {
 		}
 
 		Instant now = Instant.now();
-		cooldownUntil.computeIfAbsent(providerType, k -> new ConcurrentHashMap<>());
+		cooldownUntil.computeIfAbsent(providerType, _ -> new ConcurrentHashMap<>());
 
 		List<String> keys = provider.getKeys();
 		for (String key : keys) {
@@ -69,20 +69,22 @@ public class KeyRotationService implements KeyProvider {
 	@Override
 	public synchronized int keyCapacity(ProviderType providerType) {
 		Provider provider = settings.getProviders().get(providerType);
-		if (provider == null || provider.getKeys() == null) return 0;
+		if (provider == null || provider.getKeys() == null)
+			return 0;
+
 		return provider.getKeys().size();
 	}
 
 	private void cooldown(ProviderType providerType, String key, Duration duration) {
-		cooldownUntil.computeIfAbsent(providerType, k -> new HashMap<>())
+		cooldownUntil.computeIfAbsent(providerType, _ -> new HashMap<>())
 				.put(key, Instant.now().plus(duration));
 	}
 
 	private Duration resolveCooldown(ProviderType providerType) {
 		Provider provider = settings.getProviders().get(providerType);
-		if (provider != null && provider.getRateLimitCooldown() != null && provider.getRateLimitCooldown() > 0) {
+		if (provider != null && provider.getRateLimitCooldown() != null && provider.getRateLimitCooldown() > 0)
 			return Duration.ofSeconds(provider.getRateLimitCooldown());
-		}
+
 		return DEFAULT_COOLDOWN;
 	}
 }
