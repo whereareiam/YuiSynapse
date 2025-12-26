@@ -1,10 +1,20 @@
 {
   "id": "yuisynapse",
-  "name": "YuiSynapse",
-  "version": "0.0.1",
+  "name": "@projectName@",
+  "version": "@projectVersion@",
   "dependencies": [],
   "authors": [
     "whereareiam"
   ],
+  "updater": {
+    "release": {
+      "provider": "GITHUB",
+      "id": "whereareiam/YuiSynapse"
+    },
+    "dev": {
+      "provider": "GITHUB",
+      "id": "whereareiam/YuiSynapse"
+    }
+  },
   "entrypoint": "me.whereareiam.yuisynapse.YuiSynapse"
 }

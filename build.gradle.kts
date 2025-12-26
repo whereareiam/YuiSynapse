@@ -2,33 +2,46 @@ defaultTasks("build", "shadowJar")
 
 allprojects {
     version = (System.getenv("VERSION") ?: "dev")
+    group = "me.whereareiam"
 
-    apply(plugin = "java")
+    apply(plugin = "java-library")
 
     tasks.withType<JavaCompile> {
-        sourceCompatibility = JavaVersion.VERSION_23.toString()
-        targetCompatibility = JavaVersion.VERSION_23.toString()
+        sourceCompatibility = JavaVersion.VERSION_25.toString()
+        targetCompatibility = JavaVersion.VERSION_25.toString()
     }
 }
 
 subprojects {
     repositories {
-        mavenCentral()
         mavenLocal()
+        mavenCentral()
+        maven("https://maven.whereareiam.me/release")
+        maven("https://maven.whereareiam.me/development")
     }
 
-    if (project.name != "yuisynapse-common-api") {
+    tasks.withType<Test> {
+        useJUnitPlatform()
+    }
+
+    if (project.name != "yuisynapse-api") {
         dependencies {
-            "compileOnly"(project(":yuisynapse-common-api"))
+            "compileOnly"(project(":yuisynapse-api"))
         }
     }
 
     dependencies {
-        "compileOnly"(rootProject.libs.bundles.spring)
-        "compileOnly"(rootProject.libs.yui)
-        "compileOnly"(rootProject.libs.jda)
-
+        // lombok
         "compileOnly"(rootProject.libs.lombok)
         "annotationProcessor"(rootProject.libs.lombok)
+
+        // general
+        "compileOnly"(rootProject.libs.yui)
+
+        // testing
+        "testImplementation"(project(":yuisynapse-api"))
+        "testImplementation"(rootProject.libs.yui)
+        "testImplementation"(rootProject.libs.spring.boot.test)
+        "testRuntimeOnly"(rootProject.libs.junit.platform.launcher)
     }
 }

@@ -1,8 +1,6 @@
 rootProject.name = "YuiSynapse"
 
-include(":yuisynapse-providers:provider-openrouter")
-include(":yuisynapse-adapter-config")
-include(":yuisynapse-adapter-tools")
-include(":yuisynapse-common-api")
+include(":yuisynapse-providers:provider-openai")
 include(":yuisynapse-bootstrap")
 include(":yuisynapse-common")
+include(":yuisynapse-api")
